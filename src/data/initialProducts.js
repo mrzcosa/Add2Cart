@@ -1,4 +1,4 @@
-import legoTechnicImage from '../assets/products/LEGO Technic Set.png'
+import legoTechnicImage from '../assets/Products/LEGO Technic Set.png'
 import jblFlip6Image from '../assets/Products/JBL Flip 6.png'
 import jordanLowImage from '../assets/Products/Jordan 1 Low.png'
 import iphone18ProImage from '../assets/Products/iphone 18 PRO.png'
