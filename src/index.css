@@ -83,3 +83,47 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .product-card:hover .desk-lamp-image-wrap>img{transform:none}
 
 .desk-lamp-product-photo img{object-fit:contain;background:#fff}
+
+/* Small-screen refinements */
+@media(max-width:700px){
+  body{min-width:320px}
+  .header-main,.main-nav,.hero,.category-strip,.home-catalog,.page-main,.seller-promo-inner,.site-footer>.container{width:calc(100% - 28px)}
+  .main-nav{padding-inline:0;gap:19px}
+  .catalog-toolbar{gap:10px}
+  .catalog-toolbar>div{min-width:0}
+  .catalog-toolbar h2{font-size:clamp(18px,5vw,22px)}
+  .sort-select select{max-width:112px}
+  .details-copy,.details-layout,.cart-layout,.product-form,.seller-table{min-width:0}
+  .details-photo{height:clamp(250px,72vw,420px)}
+  .breadcrumbs span:last-child{overflow:hidden;text-overflow:ellipsis}
+  .specification-box ul{grid-template-columns:1fr}
+  .cart-summary{padding:17px}
+  .seller-row{min-width:0}
+  .footer-main{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:380px){
+  .container,.header-main,.main-nav,.hero,.category-strip,.home-catalog,.page-main,.seller-promo-inner,.site-footer>.container{width:calc(100% - 24px)}
+  .brand{font-size:21px;gap:7px}
+  .brand-mark{width:28px;height:28px;font-size:21px}
+  .account-trigger span{max-width:76px;overflow:hidden;text-overflow:ellipsis}
+  .main-nav{gap:16px}
+  .hero{height:auto;min-height:410px}
+  .hero-copy{height:auto;min-height:410px;padding:30px 17px 70px}
+  .hero h1{font-size:clamp(36px,11vw,42px)}
+  .hero-trust{flex-wrap:wrap;max-width:260px}
+  .product-grid{grid-template-columns:minmax(0,1fr);gap:14px}
+  .product-image-wrap{height:clamp(220px,70vw,280px)}
+  .product-info{padding:12px}
+  .product-name{font-size:13px;min-height:0}
+  .product-price{font-size:18px}
+  .card-actions .quantity-control button{width:29px}
+  .button.compact{font-size:10px;padding:9px 12px;gap:6px}
+  .page-title-row h1{font-size:29px}
+  .form-bottom{align-items:stretch;flex-direction:column}
+  .form-bottom p{max-width:none}
+  .form-bottom .button{align-self:flex-start}
+  .cart-line{grid-template-columns:54px minmax(0,1fr) auto;gap:8px}
+  .cart-thumb{width:54px;height:56px}
+  .line-subtotal strong{font-size:11px}
+  .footer-main{gap:18px 12px}
+}
