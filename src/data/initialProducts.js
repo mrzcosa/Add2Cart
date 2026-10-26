@@ -14,7 +14,6 @@ import rotatingLaptopStandImage from '../assets/Products/Portable Laptop Stand w
 import reusableGlassContainersImage from '../assets/Products/Reusable Glass Food Container Set.png'
 import yogaMatImage from '../assets/Products/Yoga Mat with Carry Strap.png'
 
-const photo = (id, width = 720) => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=85`
 
 export const categories = ['Electronics', 'Fashion', 'Home & Garden', 'Toys', 'Sports', 'Computers', 'Accessories']
 
