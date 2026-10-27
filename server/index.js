@@ -114,6 +114,8 @@ const passwordDigest = async (password, salt = randomBytes(16).toString('base64u
   return `${salt}:${derived.toString('base64url')}`
 }
 const adminEmails = new Set((process.env.ADMIN_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean))
+const bootstrapAdminEmail = (process.env.BOOTSTRAP_ADMIN_EMAIL || '').trim().toLowerCase()
+if (bootstrapAdminEmail && process.env.BOOTSTRAP_ADMIN_PASSWORD) adminEmails.add(bootstrapAdminEmail)
 const safeUser = (user) => {
   if (!user) return null
   const seller = db.prepare('SELECT approval_status FROM seller_profiles WHERE user_id = ?').get(user.id)
@@ -166,6 +168,28 @@ async function hashPassword(password) {
   const encoded = await passwordDigest(password)
   return encoded
 }
+
+async function createBootstrapAdmin() {
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD
+  if (!password) return
+  const email = bootstrapAdminEmail
+  if (!email) throw new Error('BOOTSTRAP_ADMIN_EMAIL is required when BOOTSTRAP_ADMIN_PASSWORD is set.')
+  if (password.length > 128) throw new Error('BOOTSTRAP_ADMIN_PASSWORD must be 128 characters or fewer.')
+
+  const existing = db.prepare('SELECT id, email FROM users WHERE username = ?').get('admin')
+  if (existing) {
+    if (existing.email.toLowerCase() !== email) throw new Error('The username "admin" already belongs to a different account.')
+    return
+  }
+  if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) throw new Error('BOOTSTRAP_ADMIN_EMAIL already belongs to another account.')
+
+  const passwordHash = await hashPassword(password)
+  db.prepare('INSERT INTO users (id, username, email, full_name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(randomUUID(), 'admin', email, 'Add2Cart Admin', passwordHash, 'customer', new Date().toISOString())
+  console.log('Created the configured one-time bootstrap admin account.')
+}
+
+await createBootstrapAdmin()
 
 async function verifyPassword(password, encoded) {
   const [salt, expected] = (encoded || '').split(':')
