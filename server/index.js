@@ -887,6 +887,7 @@ const server = createServer(async (req, res) => {
   }
 })
 
-const port = Number(process.env.API_PORT || 4179)
-server.listen(port, '127.0.0.1', () => console.log(`Add2Cart API listening on http://127.0.0.1:${port}`))
+const port = Number(process.env.PORT || process.env.API_PORT || 4179)
+const host = process.env.API_HOST || '0.0.0.0'
+server.listen(port, host, () => console.log(`Add2Cart API listening on http://${host}:${port}`))
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { db.close(); process.exit(0) }))

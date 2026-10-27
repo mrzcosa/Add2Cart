@@ -12,7 +12,17 @@ npm run dev
 
 The Vite UI runs at `http://127.0.0.1:5173` and proxies `/api` to the API at `http://127.0.0.1:4179`. `.env.example` lists the explicit local origins allowed to call the API. Set `APP_ORIGINS` to a comma-separated list of exact trusted frontend origins if the UI runs elsewhere. Set `ADMIN_EMAILS` to the email address(es) that should have seller-approval administration rights; registration still cannot assign roles. The API creates `server/data/add2cart.sqlite` on first run. Keep this database on persistent storage; it contains accounts, seller applications, products, saved addresses, carts, sessions (token hashes only), and orders.
 
-For production, run `npm run build`, then `npm start`. The API serves the built `dist` files and the same API. Set `APP_ORIGINS` to the public site origin(s), set `ADMIN_EMAILS`, and use HTTPS behind a trusted reverse proxy. Set `DATA_DIR` or `DATABASE_PATH` to a persistent writable location when needed. `API_PORT` configures the local API and Vite proxy. This SQLite setup needs a persistent Node host; do not use an ephemeral serverless filesystem such as a default Vercel function filesystem. For serverless deployment, configure a managed PostgreSQL or other persistent database adapter first.
+## Deploy on Vercel with persistent data
+
+The frontend deploys to Vercel. The API runs as a regular Node service with a persistent disk so the existing SQLite database and profile photos survive restarts. Vercel's `/api/*` function proxies API requests to that service, keeping browser requests same-origin so the existing HttpOnly login cookie works.
+
+1. Push this repository to GitHub and import it into Vercel. Set the Vercel project root to `Add2Cart` if the repository contains the outer workspace folder; otherwise leave the root at `.`. `vercel.json` configures the Vite build and SPA routes.
+2. Create a Render web service from this repository using `render.yaml`. Attach the persistent disk at `/var/data`; the blueprint configures this path as `DATA_DIR`. The service needs a paid Render instance plan that supports persistent disks.
+3. In Render, set `APP_ORIGINS` to the exact Vercel production origin (for example `https://your-project.vercel.app`) and any custom production domain. Set `ADMIN_EMAILS` to the administrator email addresses. Do not include a trailing slash in origins.
+4. In Vercel Project Settings → Environment Variables, set `ADD2CART_API_ORIGIN` to the Render service URL (for example `https://add2cart-api.onrender.com`) for Production. Add it to Preview only if preview deployments should connect to this same API; add the preview origins to Render's `APP_ORIGINS` as needed.
+5. Redeploy the Vercel project after setting environment variables. The frontend uses relative `/api` requests through the Vercel function proxy.
+
+The first API start creates and seeds the SQLite database on the mounted disk. Back up that disk before making infrastructure changes. To move to serverless functions and a managed PostgreSQL database later, the API's SQLite-specific data layer and filesystem image storage must be migrated; this setup keeps the current backend and its features intact.
 
 ## Authentication and shopping API
 
