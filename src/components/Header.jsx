@@ -13,11 +13,13 @@ function CartButton({ cartCount, navigate, isActive }) {
   </button>
 }
 
-export default function Header({ route, query, setQuery, category, setCategory, categories, cartCount, navigate, user, onLogin, onLogout }) {
+export default function Header({ route, query, setQuery, category, setCategory, categories, cartCount, navigate, user }) {
   const [accountOpen, setAccountOpen] = useState(false)
-  const accountLinks = user
-    ? [['account', 'My account'], ['purchases', 'My purchases'], ['products', 'My products'], ['logout', 'Log out']]
-    : [['login', 'Log in'], ['register', 'Create Account']]
+  const accountLinks = user?.isGuest
+    ? [['account', 'My Profile'], ['purchases', 'My purchases'], ['products', 'My products']]
+    : user
+    ? [['account', 'My Profile'], ['purchases', 'My purchases'], ['products', 'My products'], ['logout', 'Log out']]
+    : [['account', 'My Profile'], ['purchases', 'My purchases']]
 
   return (
     <>
@@ -42,9 +44,7 @@ export default function Header({ route, query, setQuery, category, setCategory, 
             <p className="account-heading">Your account</p>
             {accountLinks.map(([page, label]) => <button key={page} type="button" role="menuitem" onClick={() => {
               setAccountOpen(false)
-              if (page === 'login' || page === 'register') onLogin(page)
-              else if (page === 'logout') onLogout()
-              else navigate(page)
+              navigate(page)
             }}>{label}</button>)}
           </div>}
         </div>

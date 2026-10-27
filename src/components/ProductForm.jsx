@@ -59,7 +59,7 @@ export default function ProductForm({ onSave, editingProduct, onCancelEdit, allC
         {key === 'category' ? <><input list="product-categories" value={values[key]} onChange={(event) => setValues({ ...values, [key]: event.target.value })} placeholder={placeholder} aria-invalid={Boolean(errors[key])} /><datalist id="product-categories">{[...new Set([...defaultCategories, ...allCategories])].map((category) => <option key={category} value={category} />)}</datalist></> : type === 'textarea' ? <textarea rows={key === 'description' ? 3 : 2} value={values[key]} onChange={(event) => setValues({ ...values, [key]: event.target.value })} placeholder={placeholder} aria-invalid={Boolean(errors[key])} /> : <input type={type} min={key === 'quantity' ? '0' : key === 'price' ? '0.01' : undefined} step={key === 'price' ? '0.01' : key === 'quantity' ? '1' : undefined} value={values[key]} onChange={(event) => setValues({ ...values, [key]: event.target.value })} placeholder={placeholder} aria-invalid={Boolean(errors[key])} />}
         {errors[key] && <small className="field-error" role="alert">{errors[key]}</small>}
       </label>)}</div>
-      {saveError && <p className="auth-error" role="alert">{saveError}</p>}
+      {saveError && <p className="form-error" role="alert">{saveError}</p>}
       <div className="form-bottom"><p>* All listing details are required. Ratings come from shopper reviews.</p><button className="button primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editingProduct ? 'Save changes' : 'Publish listing'}</button></div>
     </form>
   )

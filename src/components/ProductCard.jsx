@@ -1,4 +1,4 @@
-﻿import { money, imageFallback } from '../utils/marketplace'
+import { money, imageFallback } from '../utils/marketplace'
 
 export default function ProductCard({ product, openProduct }) {
   return (

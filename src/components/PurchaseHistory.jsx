@@ -57,7 +57,7 @@ export default function PurchaseHistory({ orders, onUpdateStatus, navigate }) {
           </div>
         )}
       </section>
-      <p className="purchase-local-note">Orders are linked to your account in the application database. E-wallet payment and shipment tracking require provider integrations.</p>
+      <p className="purchase-local-note">Orders are saved in this browser. E-wallet payment and shipment tracking are demo features and do not contact a payment or delivery provider.</p>
     </main>
   )
 }

@@ -3,7 +3,7 @@ import { money, imageFallback } from '../utils/marketplace'
 import QuantitySelector from './QuantitySelector'
 import StockBadge from './StockBadge'
 
-export default function CartView({ cartItems, products, setCartQuantity, removeFromCart, clearCart, continueShopping, openProduct, savedItems = [], saveForLater, authenticated, onRequireAuth, onRequestCheckout }) {
+export default function CartView({ cartItems, products, setCartQuantity, removeFromCart, clearCart, continueShopping, openProduct, savedItems = [], saveForLater, onRequestCheckout }) {
   const lines = cartItems
     .map((item) => ({ ...item, product: products.find((product) => product.id === item.id) }))
     .filter((item) => item.product)
@@ -32,8 +32,8 @@ export default function CartView({ cartItems, products, setCartQuantity, removeF
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 8h14l1 13H4L5 8Z" /><path d="M9 8V6a3 3 0 0 1 6 0v2" /></svg>
           </span>
           <h2>Your cart is empty</h2>
-          <p>{authenticated ? 'Find something useful, lovely, or just right for you.' : 'Log in to view your account cart and continue to checkout.'}</p>
-          {authenticated ? <button className="button primary" onClick={continueShopping}>Explore finds</button> : <button className="button primary" onClick={() => onRequireAuth({ type: 'checkout' })}>Log In or Create Account</button>}
+          <p>Find something useful, lovely, or just right for you.</p>
+          <button className="button primary" onClick={continueShopping}>Explore finds</button>
         </div>
       ) : (
         <div className="cart-layout">
@@ -86,7 +86,7 @@ export default function CartView({ cartItems, products, setCartQuantity, removeF
             <div className="summary-row"><span>Shipping</span><strong className="free-text">Free</strong></div>
             <div className="summary-total"><span>Estimated total</span><strong>{money(selectedTotal)}</strong></div>
             <p className="demo-note">Demo marketplace. No payment will be collected.</p>
-            <button className="button primary full" disabled={selectedItemCount === 0} onClick={() => authenticated ? onRequestCheckout(selectedLines, selectedTotal) : onRequireAuth({ type: 'checkout' })}>Proceed to Checkout</button>
+            <button className="button primary full" disabled={selectedItemCount === 0} onClick={() => onRequestCheckout(selectedLines, selectedTotal)}>Proceed to Checkout</button>
             <button className="text-button continue-link" onClick={continueShopping}>Continue shopping</button>
           </aside>
         </div>

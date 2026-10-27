@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Header from './components/Header'
 import ProductGrid from './components/ProductGrid'
 import SellerDashboard from './components/SellerDashboard'
@@ -6,7 +6,6 @@ import CartView from './components/CartView'
 import PurchaseHistory from './components/PurchaseHistory'
 import AccountDashboard from './components/AccountDashboard'
 import CheckoutModal from './components/CheckoutModal'
-import AuthModal from './components/AuthModal'
 import Brand from './components/Brand'
 import QuantitySelector from './components/QuantitySelector'
 import StockBadge from './components/StockBadge'
@@ -16,7 +15,7 @@ import iphoneHeroImage from './assets/Hero Banner/Iphone 17 Pro.png'
 import clnHeroImage from './assets/Hero Banner/CLN.png'
 import { categories as seedCategories, initialProducts } from './data/initialProducts'
 import { imageFallback, money, readStorage, writeStorage } from './utils/marketplace'
-import { apiRequest, newIdempotencyKey } from './utils/api'
+import { localStoreOperation } from './utils/localStore'
 
 const getRoute = () => {
   const [page = 'home', id] = window.location.hash.replace(/^#/, '').split('/')
@@ -52,7 +51,7 @@ const safeCart = () => {
   const stored = readStorage('findly-cart-v1', [])
   return Array.isArray(stored) ? stored.filter((item) => item && typeof item.id === 'string' && Number.isInteger(item.quantity) && item.quantity > 0) : []
 }
-function fromApiProduct(product) {
+function fromLocalProduct(product) {
   const seed = initialProducts.find((item) => item.id === product.id)
   const sellerProduct = Boolean(product.sellerId)
   return {
@@ -159,30 +158,20 @@ function ProductDetails({ product, products, quantity, setQuantity, addToCart, d
 
 export default function App() {
   const [products, setProducts] = useState(safeProducts)
-  const [cartItems, setCartItems] = useState([])
+  const [cartItems, setCartItems] = useState(safeCart)
   const [purchases, setPurchases] = useState([])
-  const [user, setUser] = useState(null)
-  const [authLoading, setAuthLoading] = useState(true)
-  const [authOpen, setAuthOpen] = useState(false)
-  const [authMode, setAuthMode] = useState('login')
-  const [pendingAction, setPendingAction] = useState(null)
+  const [user, setUser] = useState({ id: 'guest-shopper', username: 'guest_shopper', fullName: 'Guest shopper', email: '', isGuest: true, role: 'customer' })
   const [cartCheckout, setCartCheckout] = useState(null)
   const [savedItems, setSavedItems] = useState(() => { const saved = readStorage('findly-saved-v1', []); return Array.isArray(saved) ? saved.filter((id) => typeof id === 'string') : [] })
   const [selectedQuantities, setSelectedQuantities] = useState({})
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState(null)
-  const [apiCategories, setApiCategories] = useState([])
+  const [localCategories, setLocalCategories] = useState([])
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [route, setRoute] = useState(getRoute)
   const [notice, setNotice] = useState('')
   const [detailQuantity, setDetailQuantity] = useState(1)
   const [directCheckoutItems, setDirectCheckoutItems] = useState(null)
-  const legacyCartRef = useRef(null)
-  const migrationKeyRef = useRef(newIdempotencyKey())
-  const pendingActionRef = useRef(null)
-  const executedActionIdsRef = useRef(new Set())
-  if (legacyCartRef.current === null) legacyCartRef.current = safeCart()
-
   useEffect(() => { writeStorage('findly-saved-v1', savedItems) }, [savedItems])
   useEffect(() => { const sync = () => { setRoute(getRoute()); window.scrollTo({ top: 0, behavior: 'smooth' }) }; window.addEventListener('hashchange', sync); return () => window.removeEventListener('hashchange', sync) }, [])
   useEffect(() => {
@@ -191,8 +180,8 @@ export default function App() {
       if (!query.trim()) { setSearchResults(null); return }
       try {
         const params = new URLSearchParams({ q: query.trim(), category: selectedCategory, limit: '100' })
-        const result = await apiRequest(`/api/products/search?${params}`, { signal: controller.signal })
-        setSearchResults(result.products.map(fromApiProduct))
+        const result = await localStoreOperation(`/products/search?${params}`, { signal: controller.signal })
+        setSearchResults(result.products.map(fromLocalProduct))
       } catch (error) {
         if (error.name !== 'AbortError') setSearchResults(null)
       }
@@ -200,8 +189,9 @@ export default function App() {
     return () => { window.clearTimeout(timer); controller.abort() }
   }, [query, selectedCategory])
 
-  const categories = useMemo(() => [...new Set([...seedCategories, ...apiCategories, ...products.map((product) => product.category).filter(Boolean)])], [products, apiCategories])
+  const categories = useMemo(() => [...new Set([...seedCategories, ...localCategories, ...products.map((product) => product.category).filter(Boolean)])], [products, localCategories])
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0)
+
   const searchedProducts = useMemo(() => (query.trim() && searchResults !== null ? searchResults : products).filter((product) => {
     const text = `${product.name} ${product.description} ${product.category}`.toLocaleLowerCase()
     return (selectedCategory === 'All' || product.category === selectedCategory) && (!query.trim() || text.includes(query.trim().toLocaleLowerCase()))
@@ -223,11 +213,11 @@ export default function App() {
     }))
   }
 
-  const setApiProducts = useCallback((rows) => setProducts(rows.map(fromApiProduct)), [])
+  const setCatalogProducts = useCallback((rows) => setProducts(rows.map(fromLocalProduct)), [])
   const applySellerProducts = useCallback((rows, removedId) => setProducts((current) => {
     const next = removedId ? current.filter((product) => product.id !== removedId) : [...current]
     for (const row of rows) {
-      const product = fromApiProduct(row)
+      const product = fromLocalProduct(row)
       const index = next.findIndex((item) => item.id === product.id)
       if (index >= 0) next[index] = product
       else next.unshift(product)
@@ -249,60 +239,43 @@ export default function App() {
     }
   }
 
-  async function refreshAuthenticatedData() {
-    const legacy = legacyCartRef.current
-    if (legacy.length) {
-      await apiRequest('/api/cart/migrate', { method: 'POST', body: { items: legacy }, idempotencyKey: migrationKeyRef.current })
-      legacyCartRef.current = []
-    }
-    localStorage.removeItem('findly-cart-v1')
+  async function refreshLocalData() {
     const [cart, catalogResponse, orderResponse, productResponse, wishlist] = await Promise.all([
-      apiRequest('/api/cart'), apiRequest('/api/catalog'), apiRequest('/api/orders'), apiRequest('/api/products?limit=100'), apiRequest('/api/wishlist'),
+      localStoreOperation('/cart'), localStoreOperation('/catalog'), localStoreOperation('/orders'), localStoreOperation('/products?limit=100'), localStoreOperation('/wishlist'),
     ])
     setCartItems(cart.items.map(({ id, quantity }) => ({ id, quantity })))
     setSavedItems(wishlist.items.map((item) => typeof item === 'string' ? item : item.id))
-    setApiProducts(productResponse.products)
+    setCatalogProducts(productResponse.products)
     applyInventory(catalogResponse.products)
     setPurchases(orderResponse.orders.map(hydrateOrder))
   }
 
   useEffect(() => {
     let active = true
-    async function initializeAccount() {
+    async function initializeLocalStore() {
       try {
-        const [catalogResponse, productResponse, categoryResponse] = await Promise.all([apiRequest('/api/catalog'), apiRequest('/api/products?limit=100'), apiRequest('/api/categories')])
-        if (active) { setApiProducts(productResponse.products); setApiCategories(categoryResponse.categories); applyInventory(catalogResponse.products) }
-      } catch { /* Browsing remains available if the account API is offline. */ }
+        const [catalogResponse, productResponse, categoryResponse] = await Promise.all([localStoreOperation('/catalog'), localStoreOperation('/products?limit=100'), localStoreOperation('/categories')])
+        if (active) { setCatalogProducts(productResponse.products); setLocalCategories(categoryResponse.categories); applyInventory(catalogResponse.products) }
+      } catch { /* Seed products remain available if browser storage is unavailable. */ }
       try {
-        const result = await apiRequest('/api/auth/me')
+        const result = await localStoreOperation('/profile')
         if (active && result.user) {
-          await refreshAuthenticatedData()
+          await refreshLocalData()
           if (active) setUser(result.user)
         }
       } catch {
-        if (active) setUser(null)
-      } finally {
-        if (active) setAuthLoading(false)
+        if (active) setUser({ id: 'guest-shopper', username: 'guest_shopper', fullName: 'Guest shopper', email: '', isGuest: true, role: 'customer' })
       }
     }
-    initializeAccount()
+    initializeLocalStore()
     return () => { active = false }
-  // This bootstrap runs once on mount to validate the current cookie session.
+  // Load browser-stored profile and marketplace state once on mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function requestAuthentication(action, mode = 'login') {
-    if (authLoading) { flash('Checking your account. Please try again in a moment.'); return }
-    const pending = { ...action, id: newIdempotencyKey() }
-    pendingActionRef.current = pending
-    setPendingAction(pending)
-    setAuthMode(mode)
-    setAuthOpen(true)
-  }
-
-  async function addToCartAuthenticated(productId, quantity, idempotencyKey) {
-    const response = await apiRequest('/api/cart/items', {
-      method: 'POST', body: { productId, quantity }, idempotencyKey,
+  async function addToCartStored(productId, quantity) {
+    const response = await localStoreOperation('/cart/items', {
+      method: 'POST', body: { productId, quantity },
     })
     setCartItems(response.items.map(({ id, quantity: itemQuantity }) => ({ id, quantity: itemQuantity })))
     setSelectedQuantity(productId, 1)
@@ -312,26 +285,24 @@ export default function App() {
 
   function addToCart(product, quantity = 1) {
     const productId = typeof product === 'string' ? product : product.id
-    if (!user) return requestAuthentication({ type: 'add', productId, quantity })
-    addToCartAuthenticated(productId, quantity, newIdempotencyKey()).catch((error) => flash(error.message))
+    addToCartStored(productId, quantity).catch((error) => flash(error.message))
   }
 
   async function loadCartCheckout() {
-    const cart = await apiRequest('/api/cart')
+    const cart = await localStoreOperation('/cart')
     const items = cart.items.map((item) => {
       const product = products.find((candidate) => candidate.id === item.id)
       return product ? { product: { ...product, price: item.price }, quantity: item.quantity } : null
     }).filter(Boolean)
-    if (!items.length) { flash('Your account cart is empty.'); navigate('cart'); return }
+    if (!items.length) { flash('Your cart is empty.'); navigate('cart'); return }
     setCartCheckout({ items, total: items.reduce((sum, item) => sum + item.product.price * item.quantity, 0) })
     if (route.page !== 'cart') navigate('cart')
   }
 
   async function requestCartCheckout(items) {
-    if (!user) return requestAuthentication({ type: 'checkout' })
     try {
       const chosenIds = new Set(items.map(({ product }) => product.id))
-      const cart = await apiRequest('/api/cart')
+      const cart = await localStoreOperation('/cart')
       const selectedItems = cart.items.filter((item) => chosenIds.has(item.id)).map((item) => {
         const product = products.find((candidate) => candidate.id === item.id)
         return product ? { product: { ...product, price: item.price }, quantity: item.quantity } : null
@@ -341,70 +312,25 @@ export default function App() {
     } catch (error) { flash(error.message) }
   }
 
-  async function resumePendingAction() {
-    const action = pendingActionRef.current
-    pendingActionRef.current = null
-    setPendingAction(null)
-    if (!action || executedActionIdsRef.current.has(action.id)) return
-    executedActionIdsRef.current.add(action.id)
-    try {
-      if (action.type === 'add') await addToCartAuthenticated(action.productId, action.quantity, action.id)
-      if (action.type === 'buy') {
-        const product = products.find((item) => item.id === action.productId)
-        if (!product || product.quantity < action.quantity) throw new Error('This product or quantity is no longer available.')
-        setDirectCheckoutItems([{ product, quantity: action.quantity }])
-      }
-      if (action.type === 'checkout') {
-        await loadCartCheckout()
-      }
-    } catch (error) { flash(error.message) }
-  }
-
-  async function handleAuthentication(mode, payload) {
-    const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login'
-    const result = await apiRequest(endpoint, { method: 'POST', body: payload })
-    await refreshAuthenticatedData()
-    setUser(result.user)
-    setAuthOpen(false)
-    flash(`Welcome, ${result.user.fullName}.`)
-    await resumePendingAction()
-  }
-
-  async function logout() {
-    try {
-      await apiRequest('/api/auth/logout', { method: 'POST', body: {} })
-      setUser(null)
-      setCartItems([])
-      setPurchases([])
-      setSavedItems([])
-      navigate('home')
-      flash('You have logged out.')
-    } catch (error) { flash(error.message) }
-  }
-
   function setCartQuantity(product, next) {
-    if (!user) return requestAuthentication({ type: 'checkout' })
-    apiRequest(`/api/cart/items/${encodeURIComponent(product.id)}`, { method: 'PATCH', body: { quantity: next } })
+    localStoreOperation(`/cart/items/${encodeURIComponent(product.id)}`, { method: 'PATCH', body: { quantity: next } })
       .then((response) => setCartItems(response.items.map(({ id, quantity }) => ({ id, quantity }))))
       .catch((error) => flash(error.message))
   }
 
   function removeFromCart(id) {
-    if (!user) return requestAuthentication({ type: 'checkout' })
-    apiRequest(`/api/cart/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    localStoreOperation(`/cart/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
       .then((response) => setCartItems(response.items.map(({ id: itemId, quantity }) => ({ id: itemId, quantity }))))
       .catch((error) => flash(error.message))
   }
 
   function clearCart() {
-    if (!user) return requestAuthentication({ type: 'checkout' })
     if (!window.confirm('Clear all items from your cart?')) return
-    apiRequest('/api/cart', { method: 'DELETE', body: {} })
+    localStoreOperation('/cart', { method: 'DELETE', body: {} })
       .then(() => setCartItems([])).catch((error) => flash(error.message))
   }
 
   function beginDirectCheckout(product, quantity) {
-    if (!user) return requestAuthentication({ type: 'buy', productId: product.id, quantity })
     if (product.quantity < quantity || quantity < 1) {
       flash('There are not enough items available for this quantity.')
       return
@@ -412,12 +338,11 @@ export default function App() {
     setDirectCheckoutItems([{ product, quantity }])
   }
 
-  async function confirmCheckout({ items, address, paymentMethod, direct = false, idempotencyKey }) {
-    if (!user) throw new Error('Log in before placing your order.')
+  async function confirmCheckout({ items, address, paymentMethod, direct = false }) {
     const body = direct
       ? { source: 'direct', items: items.map(({ product, quantity }) => ({ productId: product.id, quantity })), address, paymentMethod }
       : { source: 'cart', itemIds: items.map(({ product }) => product.id), address, paymentMethod }
-    const result = await apiRequest('/api/orders', { method: 'POST', body, idempotencyKey })
+    const result = await localStoreOperation('/orders', { method: 'POST', body })
     setCartItems(result.cart.map(({ id, quantity }) => ({ id, quantity })))
     applyInventory(result.products)
     const order = hydrateOrder(result.order)
@@ -427,33 +352,27 @@ export default function App() {
   }
 
   async function updatePurchaseStatus(orderId, status) {
-    if (!user) return requestAuthentication({ type: 'viewPurchases' })
     if (!['Cancelled', 'Completed'].includes(status)) return
     try {
       const action = status === 'Cancelled' ? 'cancel' : 'received'
-      const result = await apiRequest(`/api/orders/${encodeURIComponent(orderId)}`, { method: 'PATCH', body: { action }, idempotencyKey: newIdempotencyKey() })
+      const result = await localStoreOperation(`/orders/${encodeURIComponent(orderId)}`, { method: 'PATCH', body: { action } })
       setPurchases((current) => current.map((order) => order.id === orderId ? hydrateOrder(result.order) : order))
       applyInventory(result.products)
     } catch (error) { flash(error.message) }
   }
 
   async function toggleSaved(id) {
-    if (!user) {
-      setSavedItems((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])
-      return
-    }
     try {
       const result = savedItems.includes(id)
-        ? await apiRequest(`/api/wishlist/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
-        : await apiRequest('/api/wishlist/items', { method: 'POST', body: { productId: id } })
+        ? await localStoreOperation(`/wishlist/items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+        : await localStoreOperation('/wishlist/items', { method: 'POST', body: { productId: id } })
       setSavedItems(result.items)
     } catch (error) { flash(error.message) }
   }
   async function saveForLater(product) {
     if (!savedItems.includes(product.id)) {
-      if (!user) return requestAuthentication({ type: 'checkout' })
       try {
-        const result = await apiRequest('/api/wishlist/items', { method: 'POST', body: { productId: product.id } })
+        const result = await localStoreOperation('/wishlist/items', { method: 'POST', body: { productId: product.id } })
         setSavedItems(result.items)
       } catch (error) { flash(error.message); return }
     }
@@ -462,22 +381,21 @@ export default function App() {
 
   function productGrid(productsToShow, title, subtitle) { return <ProductGrid products={productsToShow} title={title} subtitle={subtitle} selectedQuantities={selectedQuantities} setSelectedQuantity={setSelectedQuantity} addToCart={addToCart} toggleSaved={toggleSaved} savedItems={savedItems} openProduct={openProduct} /> }
 
-  return <div className="app-shell"><Header route={route} query={query} setQuery={setQuery} category={selectedCategory} setCategory={setSelectedCategory} categories={categories} cartCount={cartCount} navigate={navigate} user={user} onLogin={(mode) => requestAuthentication({ type: 'none' }, mode)} onLogout={logout} />
+  return <div className="app-shell"><Header route={route} query={query} setQuery={setQuery} category={selectedCategory} setCategory={setSelectedCategory} categories={categories} cartCount={cartCount} navigate={navigate} user={user} />
     {notice && <div className="toast" role="status">✓ <span>{notice}</span><button aria-label="Dismiss notification" onClick={() => setNotice('')}>×</button></div>}
     {route.page === 'product' && detailProduct && <ProductDetails key={detailProduct.id} product={detailProduct} products={products} quantity={detailQuantity} setQuantity={setDetailQuantity} addToCart={addToCart} directCheckout={beginDirectCheckout} openProduct={openProduct} setCategory={chooseCategory} />}
     {route.page === 'product' && !detailProduct && <main className="container page-main"><div className="empty-state"><h2>That listing has moved on</h2><p>Try another find from the collection.</p><button className="button primary" onClick={() => navigate('home')}>Back to home</button></div></main>}
-    {route.page === 'cart' && <CartView cartItems={cartItems} products={products} setCartQuantity={setCartQuantity} removeFromCart={removeFromCart} clearCart={clearCart} continueShopping={() => navigate('home')} openProduct={openProduct} savedItems={savedItems} saveForLater={saveForLater} authenticated={Boolean(user)} onRequireAuth={requestAuthentication} onRequestCheckout={requestCartCheckout} />}
-    {route.page === 'account' && <AccountDashboard key={user?.id || 'guest'} navigate={navigate} user={user} onLogin={() => requestAuthentication({ type: 'none' })} onUserUpdate={setUser} />}
-    {route.page === 'purchases' && (user ? <PurchaseHistory orders={purchases} onUpdateStatus={updatePurchaseStatus} navigate={navigate} /> : <main className="container page-main"><div className="empty-state"><h2>Log in to view My Purchases</h2><p>Your orders are private to your account.</p><button className="button primary" onClick={() => requestAuthentication({ type: 'viewPurchases' })}>Log In or Create Account</button></div></main>)}
-    {route.page === 'checkout' && <main className="container page-main"><div className="empty-state"><h2>{user ? 'Continue to checkout' : 'Checkout requires an account'}</h2><p>{user ? 'Review the items in your account cart.' : 'Log in or create an account before proceeding.'}</p><button className="button primary" onClick={() => user ? loadCartCheckout().catch((error) => flash(error.message)) : requestAuthentication({ type: 'checkout' })}>{user ? 'Continue to Checkout' : 'Log In or Create Account'}</button></div></main>}
+    {route.page === 'cart' && <CartView cartItems={cartItems} products={products} setCartQuantity={setCartQuantity} removeFromCart={removeFromCart} clearCart={clearCart} continueShopping={() => navigate('home')} openProduct={openProduct} savedItems={savedItems} saveForLater={saveForLater} onRequestCheckout={requestCartCheckout} />}
+    {route.page === 'account' && <AccountDashboard key={user?.id || 'guest'} navigate={navigate} user={user} onUserUpdate={setUser} />}
+    {route.page === 'purchases' && <PurchaseHistory orders={purchases} onUpdateStatus={updatePurchaseStatus} navigate={navigate} />}
+    {route.page === 'checkout' && <main className="container page-main"><div className="empty-state"><h2>Continue to checkout</h2><p>Review the items in your browser cart.</p><button className="button primary" onClick={() => loadCartCheckout().catch((error) => flash(error.message))}>Continue to Checkout</button></div></main>}
     {cartCheckout && <CheckoutModal items={cartCheckout.items} total={cartCheckout.total} onClose={() => setCartCheckout(null)} onConfirm={confirmCheckout} />}
     {directCheckoutItems && <CheckoutModal items={directCheckoutItems} total={directCheckoutItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0)} directCheckout onClose={() => setDirectCheckoutItems(null)} onConfirm={confirmCheckout} />}
-    {authOpen && <AuthModal initialMode={authMode} reason={pendingAction?.type === 'add' ? 'Log in or create an account before adding this product to your cart.' : pendingAction?.type === 'buy' ? 'Log in or create an account to continue to checkout.' : pendingAction?.type === 'checkout' ? 'Log in or create an account before proceeding to checkout.' : pendingAction?.type === 'viewPurchases' ? 'Log in to view orders belonging to your account.' : 'Log in or create an account to continue.'} onClose={() => { pendingActionRef.current = null; setPendingAction(null); setAuthOpen(false) }} onSuccess={handleAuthentication} />}
     {route.page === 'home' && <>{!isSearching && <><Hero /><CategoryStrip categories={categories} selectedCategory={selectedCategory} onSelect={chooseCategory} /></>}<main className="container home-catalog"><div className="catalog-toolbar"><div>{!isSearching && <p className="eyebrow">Find something lovely</p>}<h2>{isSearching || selectedCategory !== 'All' ? 'Your search results' : 'A few things to get you started'}</h2></div></div>{productGrid(searchedProducts, null)}{!isSearching && selectedCategory === 'All' && <div className="home-extra">{productGrid(products.filter((product) => product.quantity > 0 && product.quantity < 5), 'The last few, loved all the same', 'Almost gone')}{productGrid([...products].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4), 'Just found their way here', 'New arrivals')}</div>}</main>{!isSearching && <section className="seller-promo"><div className="container seller-promo-inner"><div><p className="eyebrow">A good thing starts somewhere</p><h2>Have something lovely to share?</h2><p>Give your pre-loved treasures or small-batch finds a place to be discovered.</p></div><button className="button dark" onClick={() => navigate('products')}>Open your little shop</button></div></section>}</>}
     {route.page === 'categories' && <main className="container page-main"><div className="page-title-row"><div><p className="eyebrow">Explore the collection</p><h1>{selectedCategory === 'All' ? 'Shop by category' : selectedCategory}</h1><p className="page-subtitle">Find everyday favorites, thoughtful details and a few happy surprises.</p></div><label className="sort-select">Category <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}><option value="All">All categories</option>{categories.map((category) => <option key={category}>{category}</option>)}</select></label></div><div className="category-chip-row"><button className={selectedCategory === 'All' ? 'selected' : ''} onClick={() => setSelectedCategory('All')}>All categories</button>{categories.map((category) => <button className={selectedCategory === category ? 'selected' : ''} key={category} onClick={() => setSelectedCategory(category)}>{category}</button>)}</div>{productGrid(searchedProducts, null)}</main>}
     {route.page === 'deals' && <main className="container page-main"><div className="page-title-row"><div><p className="eyebrow">Worth a second look</p><h1>Today’s good deals</h1><p className="page-subtitle">Lovely finds at friendly prices, picked just for you.</p></div><span className="deal-count">✦ {products.filter((product) => product.price < 2000).length} picks under ₱2,000</span></div>{productGrid(searchedProducts.filter((product) => product.price < 2000), null)}</main>}
     {route.page === 'saved' && <main className="container page-main"><div className="page-title-row"><div><p className="eyebrow">Keep a little list</p><h1>Saved items</h1><p className="page-subtitle">Your lovely finds, all in one spot.</p></div></div>{productGrid(products.filter((product) => savedItems.includes(product.id)), null, 'Saved for later')}</main>}
-    {route.page === 'products' && <SellerDashboard user={user} onLogin={() => requestAuthentication({ type: 'none' })} onProductsChange={applySellerProducts} />}
+    {route.page === 'products' && <SellerDashboard user={user} onProductsChange={applySellerProducts} />}
     {!['home', 'categories', 'deals', 'saved', 'products', 'cart', 'account', 'purchases', 'product'].includes(route.page) && <main className="container page-main"><div className="empty-state"><span className="empty-icon">✦</span><h2>There’s more to discover</h2><p>Let’s head back to all the good finds.</p><button className="button primary" onClick={() => navigate('home')}>Explore the marketplace</button></div></main>}
     <footer className="site-footer"><div className="container footer-main"><div className="footer-brand"><Brand navigate={navigate} /><p>A little marketplace for the<br />things you love.</p></div><div><h3>Discover</h3><button onClick={() => navigate('categories')}>Shop categories</button><button onClick={() => navigate('deals')}>Today’s deals</button></div><div><h3>Your Add2Cart</h3><button onClick={() => navigate('saved')}>Saved items</button><button onClick={() => navigate('products')}>My products</button></div><div className="footer-note"><span>Made for good finds</span><p>Add2Cart is a student marketplace demo.<br />Sample products and reviews are illustrative.</p></div></div><div className="container footer-bottom"><span>© 2026 Add2Cart Marketplace. All rights reserved.</span><span>Developed by: Mark Russell Cosa</span></div></footer>
   </div>
