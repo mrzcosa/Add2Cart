@@ -4,10 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node --env-file-if-exists=.env server/dev.js",
+    "api": "node --env-file-if-exists=.env server/index.js",
+    "start": "node --env-file-if-exists=.env server/start.js",
     "build": "vite build",
     "lint": "eslint .",
+    "test:auth": "node scripts/test-auth-flow.mjs",
     "preview": "vite preview"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
