@@ -598,7 +598,7 @@ const server = createServer(async (req, res) => {
       const email = String(body.email || '').trim().toLowerCase()
       const password = String(body.password || '')
       if (registering && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)) throw fail(400, 'Enter a valid email address.')
-      if (password.length < 12 || password.length > 128) throw fail(400, 'Password must be 12 to 128 characters.')
+      if ((registering && password.length < 12) || password.length > 128) throw fail(400, 'Password must be 12 to 128 characters when creating an account.')
       let user
       if (registering) {
         const fullName = String(body.fullName || '').trim()
